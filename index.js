@@ -72,18 +72,19 @@ app.get("/zoho/callback", async (req, res) => {
 
   try {
     const response = await axios.post(
-      "https://accounts.zoho.com/oauth/v2/token",
-      null,
-      {
-        params: {
-          grant_type: "authorization_code",
-          client_id: process.env.ZOHO_CLIENT_ID,
-          client_secret: process.env.ZOHO_CLIENT_SECRET,
-          redirect_uri: "https://send-us-api.vercel.app/zoho/callback",
-          code,
-        },
-      }
-    );
+  "https://accounts.zoho.com/oauth/v2/token",
+  null,
+  {
+    params: {
+      grant_type: "authorization_code",
+      client_id: process.env.ZOHO_CLIENT_ID,
+      client_secret: process.env.ZOHO_CLIENT_SECRET,
+      redirect_uri: "https://send-us-api.vercel.app/zoho/callback",
+      code,
+    },
+    timeout: 8000, // <= مهم جدًا
+  }
+);
 
     const refreshToken = response.data.refresh_token;
 
@@ -136,18 +137,20 @@ async function getAccessTokenFromDB() {
         if (!row) return reject("No refresh_token found");
 
         try {
-          const res = await axios.post(
-            "https://accounts.zoho.com/oauth/v2/token",
-            null,
-            {
-              params: {
-                refresh_token: row.refresh_token,
-                client_id: process.env.ZOHO_CLIENT_ID,
-                client_secret: process.env.ZOHO_CLIENT_SECRET,
-                grant_type: "refresh_token",
-              },
-            }
-          );
+         const res = await axios.post(
+  "https://accounts.zoho.com/oauth/v2/token",
+  null,
+  {
+    params: {
+      refresh_token: row.refresh_token,
+      client_id: process.env.ZOHO_CLIENT_ID,
+      client_secret: process.env.ZOHO_CLIENT_SECRET,
+      grant_type: "refresh_token",
+    },
+    timeout: 8000, // <= مهم جدًا
+  }
+);
+
 
           resolve(res.data.access_token);
         } catch (error) {
