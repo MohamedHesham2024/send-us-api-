@@ -1,29 +1,42 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const nodemailer = require("nodemailer");
+const mongoose = require("mongoose");
 require("dotenv").config();
 const axios = require("axios");
 const path = require("path");
-const fs = require("fs");
 const cors = require("cors");
 
 const app = express();
 const PORT = 3000;
-const TOKEN_FILE = path.join(__dirname, "token.json");
+
+// اتصال بـ MongoDB
+mongoose
+  .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("✅ Connected to MongoDB"))
+  .catch((err) => console.error("❌ MongoDB connection error:", err));
+
+// مخطط التوكن
+const tokenSchema = new mongoose.Schema({
+  refresh_token: String,
+  created_at: { type: Date, default: Date.now },
+});
+
+const Token = mongoose.model("Token", tokenSchema);
 
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static("public")); // حط HTML هنا
+app.use(express.static("public")); // حط هنا ملف HTML
 
-// ------------------ إرسال الإيميل ------------------
+// إرسال إيميل
 app.post("/send-email", async (req, res) => {
   const { firstName, lastName, email, bookCount, additionalInfo } = req.body;
 
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT),
-    secure: false, // true لو بتستخدم 465
+    secure: false,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -52,9 +65,10 @@ app.post("/send-email", async (req, res) => {
   }
 });
 
-// ------------------ استلام الكود من Zoho ------------------
+// Zoho callback
 app.get("/zoho/callback", async (req, res) => {
   const { code } = req.query;
+
   if (!code) return res.status(400).send("Missing code from Zoho");
 
   try {
@@ -74,8 +88,9 @@ app.get("/zoho/callback", async (req, res) => {
     );
 
     const refreshToken = response.data.refresh_token;
-    fs.writeFileSync(TOKEN_FILE, JSON.stringify({ refresh_token: refreshToken }, null, 2));
-    console.log("✅ Refresh token saved to file:", refreshToken);
+
+    await Token.create({ refresh_token: refreshToken });
+    console.log("✅ Refresh token saved to MongoDB:", refreshToken);
 
     return res.redirect("/zoho-success.html");
   } catch (err) {
@@ -84,57 +99,47 @@ app.get("/zoho/callback", async (req, res) => {
   }
 });
 
-// ------------------ عرض آخر Refresh Token (اختياري) ------------------
-app.get("/zoho/last-refresh-token", (req, res) => {
+// جلب آخر refresh_token
+app.get("/zoho/last-refresh-token", async (req, res) => {
   try {
-    if (!fs.existsSync(TOKEN_FILE)) {
-      return res.status(404).json({ error: "No token file found" });
-    }
+    const latest = await Token.findOne().sort({ created_at: -1 });
+    if (!latest) return res.status(404).json({ error: "No token found" });
 
-    const tokenData = JSON.parse(fs.readFileSync(TOKEN_FILE, "utf-8"));
-    return res.status(200).json({ refresh_token: tokenData.refresh_token });
+    return res.status(200).json({ refresh_token: latest.refresh_token });
   } catch (err) {
-    return res.status(500).json({ error: "Failed to read token file" });
+    console.error("DB Error:", err);
+    return res.status(500).json({ error: "Database error" });
   }
 });
 
-// ------------------ جلب Access Token ------------------
-async function getAccessTokenFromFile() {
-  try {
-    if (!fs.existsSync(TOKEN_FILE)) {
-      throw new Error("No refresh_token saved");
+// جلب access token من Zoho
+async function getAccessTokenFromMongo() {
+  const latest = await Token.findOne().sort({ created_at: -1 });
+  if (!latest) throw new Error("No refresh token found");
+
+  const response = await axios.post(
+    "https://accounts.zoho.com/oauth/v2/token",
+    null,
+    {
+      params: {
+        refresh_token: latest.refresh_token,
+        client_id: process.env.ZOHO_CLIENT_ID,
+        client_secret: process.env.ZOHO_CLIENT_SECRET,
+        grant_type: "refresh_token",
+      },
+      timeout: 8000,
     }
+  );
 
-    const tokenData = JSON.parse(fs.readFileSync(TOKEN_FILE, "utf-8"));
-    const refreshToken = tokenData.refresh_token;
-
-    const res = await axios.post(
-      "https://accounts.zoho.com/oauth/v2/token",
-      null,
-      {
-        params: {
-          refresh_token: refreshToken,
-          client_id: process.env.ZOHO_CLIENT_ID,
-          client_secret: process.env.ZOHO_CLIENT_SECRET,
-          grant_type: "refresh_token",
-        },
-        timeout: 8000,
-      }
-    );
-
-    return res.data.access_token;
-  } catch (err) {
-    console.error("❌ Error getting access token:", err.response?.data || err);
-    throw err;
-  }
+  return response.data.access_token;
 }
 
-// ------------------ إرسال بيانات إلى Zoho Bigin ------------------
+// إرسال بيانات إلى Zoho
 app.post("/zoho/send-data", async (req, res) => {
   const zohoData = req.body;
 
   try {
-    const accessToken = await getAccessTokenFromFile();
+    const accessToken = await getAccessTokenFromMongo();
 
     const response = await axios.post(
       "https://www.zohoapis.com/bigin/v1/Contacts",
