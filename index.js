@@ -155,6 +155,29 @@ async function getAccessTokenFromMongo() {
 
   return response.data.access_token;
 }
+app.get("/zoho/contact/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const accessToken = await getAccessTokenFromMongo(); // أو env أو db حسب شغلك
+
+    const response = await axios.get(
+      `https://www.zohoapis.com/bigin/v1/Contacts/${id}`,
+      {
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+        },
+      }
+    );
+
+    res.status(200).json({ success: true, contact: response.data.data });
+  } catch (error) {
+    console.error("❌ Error fetching contact:", error.response?.data || error);
+    res
+      .status(500)
+      .json({ success: false, error: error.response?.data || error });
+  }
+});
 
 // إرسال بيانات إلى Zoho
 app.post("/zoho/send-data", async (req, res) => {
