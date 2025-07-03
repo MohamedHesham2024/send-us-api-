@@ -27,9 +27,8 @@ const Token = mongoose.model("Token", tokenSchema);
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static("public")); // حط هنا ملف HTML
+app.use(express.static("public")); 
 
-// إرسال إيميل
 app.post("/send-email", async (req, res) => {
   const { firstName, lastName, email, bookCount, additionalInfo } = req.body;
 
@@ -63,6 +62,29 @@ app.post("/send-email", async (req, res) => {
     console.error("Email error:", error);
     res.status(500).json({ success: false, message: "Failed to send email" });
   }
+});
+app.get("/zoho-success.html", (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+      <title>Zoho Connected</title>
+      <style>
+        body {
+          font-family: sans-serif;
+          text-align: center;
+          margin-top: 80px;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>🎉 Zoho Account Connected Successfully!</h1>
+      <p>You can now close this window.</p>
+    </body>
+    </html>
+  `);
 });
 
 // Zoho callback
