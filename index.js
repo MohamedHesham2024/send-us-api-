@@ -6,6 +6,9 @@ require("dotenv").config();
 const axios = require("axios");
 const path = require("path");
 const cors = require("cors");
+const SecondaryListingRoutes = require("./routes/secondary_listing.routes");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("./swagger");
 
 const app = express();
 const PORT = 3000;
@@ -204,7 +207,15 @@ app.post("/zoho/send-data", async (req, res) => {
     res.status(500).json({ success: false, error });
   }
 });
+app.use("/api/secondary-listing", SecondaryListingRoutes);
+console.log("🔍 Swagger Paths:", Object.keys(swaggerSpec.paths || {}));
 
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+app.get("/swagger.json", (req, res) => {
+  res.setHeader("Content-Type", "application/json");
+  res.send(swaggerSpec);
+});
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
